@@ -3,6 +3,8 @@ package main
 import (
 	"flag"
 	"fmt"
+	"gochat_my/connect"
+	"gochat_my/logic"
 	"os"
 	"os/signal"
 	"syscall"
@@ -19,9 +21,9 @@ func main() {
 	// 启动服务
 	switch module {
 	case "logic":
-
-		return
+		logic.New().Run()
 	case "websocket":
+		connect.New().Run()
 		return
 	case "task":
 		return
@@ -31,7 +33,7 @@ func main() {
 		//return
 	default:
 		fmt.Println("Exiting , module not support!")
-		//return
+		return
 	}
 	fmt.Printf("Run %s module done!\n", module)
 

@@ -60,12 +60,12 @@ type CommonRedis struct {
 }
 
 type ConnectConfig struct {
-	ConnectBase                ConnectBase                `mapstructure:"connect-base"`
-	ConnectBucket              ConnectBucket              `mapstructure:"connect-bucket"`
-	ConnectWebsocket           ConnectWebsocket           `mapstructure:"connect-websocket"`
-	ConnectTcp                 ConnectTcp                 `mapstructure:"connect-tcp"`
-	ConnectRpcAddressWebSockts ConnectRpcAddressWebsockts `mapstructure:"connect-rpcAddress-websockts"`
-	ConnectRpcAddressTcp       ConnectRpcAddressTcp       `mapstructure:"connect-rpcAddress-tcp"`
+	ConnectBase                ConnectBase                `mapstructure:"connect.toml-base"`
+	ConnectBucket              ConnectBucket              `mapstructure:"connect.toml-bucket"`
+	ConnectWebsocket           ConnectWebsocket           `mapstructure:"connect.toml-websocket"`
+	ConnectTcp                 ConnectTcp                 `mapstructure:"connect.toml-tcp"`
+	ConnectRpcAddressWebSockts ConnectRpcAddressWebsockts `mapstructure:"connect.toml-rpcAddress-websockts"`
+	ConnectRpcAddressTcp       ConnectRpcAddressTcp       `mapstructure:"connect.toml-rpcAddress-tcp"`
 }
 type ConnectBase struct {
 	CertPath string `mapstructure:"certPath"`
@@ -146,7 +146,7 @@ func GetGinRunMode() string {
 	if env == "prod" {
 		return "release"
 	}
-	return "debug"
+	return "dev"
 }
 func getCurrentDIr() string {
 	_, filename, _, _ := runtime.Caller(1)
@@ -154,6 +154,7 @@ func getCurrentDIr() string {
 	dir := strings.Join(aPath[0:len(aPath)-1], "/")
 	return dir
 }
+
 func Init() {
 	var err error
 	once.Do(func() {
@@ -162,9 +163,9 @@ func Init() {
 		configFilePath := realPath + "/" + env + "/"
 		Conf = new(Config)
 		viper.SetConfigType("toml")
-		viper.SetConfigFile(configFilePath)
+		viper.AddConfigPath(configFilePath)
 		viper.SetConfigName("/connect")
-		if err = viper.ReadInConfig(); err == nil {
+		if err = viper.ReadInConfig(); err != nil {
 			panic(err)
 		} else {
 			err = viper.Unmarshal(&Conf.Connect)
@@ -222,3 +223,7 @@ func Init() {
 func init() {
 	Init()
 }
+
+//func main() {
+//	fmt.Println(Conf)
+//}

@@ -40,6 +40,7 @@ func (rpc *RpcConnect) DisConnect(disConnReq *proto.DisConnectRequest) (err erro
 	}
 	return
 }
+
 func (c *Connect) InitLogicRpcClient() (err error) {
 	etcdConfigOpt := &store.Config{
 		ClientTLS:         nil,
@@ -79,9 +80,6 @@ func (c *Connect) InitConnectWebSocketRpcServer() (err error) {
 	}
 	return
 }
-
-type RpcConnectPush struct{}
-
 func (c *Connect) createConnectWebSocketsRpcServer(network, addr string) {
 	s := server.NewServer()
 	c.addRegistryPlugin(s, network, addr)
@@ -95,7 +93,6 @@ func (c *Connect) createConnectWebSocketsRpcServer(network, addr string) {
 	})
 	s.Serve(network, addr)
 }
-
 func (c *Connect) addRegistryPlugin(s *server.Server, network, addr string) {
 	r := &serverplugin.EtcdV3RegisterPlugin{
 		ServiceAddress: network + "@" + addr,
@@ -110,3 +107,8 @@ func (c *Connect) addRegistryPlugin(s *server.Server, network, addr string) {
 	}
 	s.Plugins.Add(r)
 }
+
+// MicroServe Instance of Connect
+type RpcConnectPush struct{}
+
+// todo: add microServe HandelFunc

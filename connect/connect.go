@@ -33,24 +33,24 @@ func (c *Connect) Run() {
 			RoutineSize:   connectConf.ConnectBucket.RoutineSize,
 			RoutineAmount: connectConf.ConnectBucket.RoutineAmount,
 		})
-		operator := new(DefaultOperator)
-		DefaultServer = NewServer(Buckets, operator, ServerOptions{
-			WriteWait:       10 * time.Second,
-			PongWait:        60 * time.Second,
-			PingPeriod:      54 * time.Second,
-			MaxMessageSize:  512,
-			ReadBufferSize:  1024,
-			WriteBufferSize: 1024,
-			BroadcastSize:   512,
-		})
-		c.ServerId = fmt.Sprintf("%s-%s", "ws", uuid.New().String())
-		// init connect layer rpc server ,task layer will call this
-		if err := c.InitConnectWebSocketRpcServer(); err != nil {
-			logrus.Panicf("InitConnectWebSocketRpcServer Fatal error : %s \n", err.Error())
-		}
-		// start connect layer server handler persistent connection
-		if err := c.InitWebSocket(); err != nil {
-			logrus.Panicf("Connect layer InitWebSocket error : %s \n", err.Error())
-		}
+	}
+	operator := new(DefaultOperator)
+	DefaultServer = NewServer(Buckets, operator, ServerOptions{
+		WriteWait:       10 * time.Second,
+		PongWait:        60 * time.Second,
+		PingPeriod:      54 * time.Second,
+		MaxMessageSize:  512,
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+		BroadcastSize:   512,
+	})
+	c.ServerId = fmt.Sprintf("%s-%s", "ws", uuid.New().String())
+	// init connect layer rpc server ,task layer will call this
+	if err := c.InitConnectWebSocketRpcServer(); err != nil {
+		logrus.Panicf("InitConnectWebSocketRpcServer Fatal error : %s \n", err.Error())
+	}
+	// start connect layer server handler persistent connection
+	if err := c.InitWebSocket(); err != nil {
+		logrus.Panicf("Connect layer InitWebSocket error : %s \n", err.Error())
 	}
 }

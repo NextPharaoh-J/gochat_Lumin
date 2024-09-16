@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"gochat_my/connect"
 	"gochat_my/logic"
+	"gochat_my/task"
 	"os"
 	"os/signal"
 	"syscall"
@@ -24,9 +25,8 @@ func main() {
 		logic.New().Run()
 	case "websocket":
 		connect.New().Run()
-		return
 	case "task":
-		return
+		task.New().Run()
 	case "api":
 		return
 	case "site":

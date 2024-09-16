@@ -1,0 +1,27 @@
+package task
+
+import (
+	"github.com/sirupsen/logrus"
+	"gochat_my/config"
+	"runtime"
+)
+
+type Task struct{}
+
+func New() *Task {
+	return new(Task)
+}
+
+func (task *Task) Run() {
+	taskConfig := config.Conf.Task
+	runtime.GOMAXPROCS(taskConfig.TaskBase.CpuNum)
+	// read from redis queue
+	if err := task.InitQueueRedisClient(); err != nil {
+		logrus.Panicf("task init publishRedisClient fail, err: %s", err.Error())
+	}
+	// rpc call connect layer send msg
+	if err := task.InitConnectRpcClient(); err != nil {
+		logrus.Panicf("task init InitQueueRedisClient fail, err: %s", err.Error())
+	}
+	task.GoPush()
+}

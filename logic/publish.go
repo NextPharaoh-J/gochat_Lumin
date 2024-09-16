@@ -1,6 +1,7 @@
 package logic
 
 import (
+	"bytes"
 	"github.com/go-redis/redis"
 	"github.com/rcrowley/go-metrics"
 	"github.com/rpcxio/rpcx-etcd/serverplugin"
@@ -72,4 +73,11 @@ func (logic *Logic) addRegistryPlugin(s *server.Server, network, addr string) {
 		logrus.Fatal(err.Error())
 	}
 	s.Plugins.Add(r)
+}
+
+func (logic *Logic) getUserKey(authKey string) string {
+	var returnKey bytes.Buffer
+	returnKey.WriteString(config.RedisPrefix)
+	returnKey.WriteString(authKey)
+	return returnKey.String()
 }

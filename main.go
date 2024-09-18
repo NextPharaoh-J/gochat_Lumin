@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"gochat_my/api"
 	"gochat_my/connect"
 	"gochat_my/logic"
 	"gochat_my/task"
@@ -28,7 +29,7 @@ func main() {
 	case "task":
 		task.New().Run()
 	case "api":
-		return
+		api.New().Run()
 	case "site":
 		//return
 	default:

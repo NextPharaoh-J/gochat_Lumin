@@ -111,4 +111,52 @@ func (c *Connect) addRegistryPlugin(s *server.Server, network, addr string) {
 // MicroServe Instance of Connect
 type RpcConnectPush struct{}
 
-// todo: add microServe HandelFunc
+func (rpc *RpcConnectPush) PushSingleMsg(ctx context.Context, pushMsgReq *proto.PushMsgRequest, successReply *proto.SuccessReply) (err error) {
+	var (
+		bucket  *Bucket
+		channel *Channel
+	)
+
+	logrus.Infof("rpc PushMsg : %v", pushMsgReq)
+	if pushMsgReq == nil {
+		logrus.Errorf("rpc PushMsgReq is nil")
+		return
+	}
+	bucket = DefaultServer.Bucket(pushMsgReq.UserId)
+	if channel = bucket.Channel(pushMsgReq.UserId); channel != nil {
+		err = channel.Push(&pushMsgReq.Msg)
+		logrus.Infof("rpc PushMsgReq channel push success : %v", pushMsgReq.Msg)
+		return
+	}
+	successReply.Msg = config.SuccessReplyMsg
+	successReply.Code = config.SuccessReplyCode
+	logrus.Infof("successReply : %v", successReply)
+	return
+}
+func (rpc *RpcConnectPush) PushRoomMsg(ctx context.Context, pushMsgReq *proto.PushRoomMsgRequest, successReply *proto.SuccessReply) (err error) {
+	successReply.Msg = config.SuccessReplyMsg
+	successReply.Code = config.SuccessReplyCode
+	logrus.Infof("PushRoomMsg : %v", pushMsgReq)
+	for _, bucket := range DefaultServer.Buckets {
+		bucket.BroadcastRoom(pushMsgReq)
+	}
+	return
+}
+func (rpc *RpcConnectPush) PushRoomCount(ctx context.Context, pushRoomMsgReq *proto.PushRoomMsgRequest, successReply *proto.SuccessReply) (err error) {
+	successReply.Msg = config.SuccessReplyMsg
+	successReply.Code = config.SuccessReplyCode
+	logrus.Infof("PushRoomCount : %v", pushRoomMsgReq)
+	for _, bucket := range DefaultServer.Buckets {
+		bucket.BroadcastRoom(pushRoomMsgReq)
+	}
+	return
+}
+func (rpc *RpcConnectPush) PushRoomInfo(ctx context.Context, pushRoomMsgReq *proto.PushRoomMsgRequest, successReply *proto.SuccessReply) (err error) {
+	successReply.Msg = config.SuccessReplyMsg
+	successReply.Code = config.SuccessReplyCode
+	logrus.Infof("PushRoomInfo : %v", pushRoomMsgReq)
+	for _, bucket := range DefaultServer.Buckets {
+		bucket.BroadcastRoom(pushRoomMsgReq)
+	}
+	return
+}

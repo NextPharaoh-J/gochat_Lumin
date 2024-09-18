@@ -3,6 +3,7 @@ package connect
 import (
 	"gochat_my/proto"
 	"sync"
+	"sync/atomic"
 )
 
 type Bucket struct {
@@ -88,4 +89,16 @@ func (b *Bucket) Put(userId int, roomId int, ch *Channel) (err error) {
 		err = room.Put(ch)
 	}
 	return
+}
+
+func (b *Bucket) Channel(userId int) (ch *Channel) {
+	b.cLock.RLock()
+	ch = b.chs[userId]
+	b.cLock.RUnlock()
+	return
+}
+
+func (b *Bucket) BroadcastRoom(pushRoomMsgReq *proto.PushRoomMsgRequest) {
+	num := atomic.AddUint64(&b.routinesNum, 1) % b.bucketOptions.RoutineAmount
+	b.routines[num] <- pushRoomMsgReq
 }

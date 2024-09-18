@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/bwmarrin/snowflake"
 	"io"
+	"time"
 )
 
 const SessionPrefix = "sess_"
@@ -34,4 +35,8 @@ func GetSessionIdByUserId(userId int) string {
 
 func GetSessionName(sessionId string) string {
 	return SessionPrefix + sessionId
+}
+
+func GetNowDateTime() string {
+	return time.Unix(time.Now().Unix(), 0).Format("2006-01-02 15:04:05")
 }

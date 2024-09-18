@@ -1,20 +1,30 @@
+/**
+ * Created by lock
+ * Date: 2019-08-10
+ * Time: 18:35
+ */
 package connect
 
 import "gochat_my/proto"
 
 type Operator interface {
 	Connect(conn *proto.ConnectRequest) (int, error)
-	DisConnect(conn *proto.DisConnectRequest) error
+	DisConnect(disConn *proto.DisConnectRequest) (err error)
 }
-type DefaultOperator struct{}
 
-func (this *DefaultOperator) Connect(conn *proto.ConnectRequest) (uid int, err error) {
+type DefaultOperator struct {
+}
+
+// rpc call logic layer
+func (o *DefaultOperator) Connect(conn *proto.ConnectRequest) (uid int, err error) {
 	rpcConnect := new(RpcConnect)
 	uid, err = rpcConnect.Connect(conn)
 	return
 }
-func (this *DefaultOperator) DisConnect(conn *proto.DisConnectRequest) (err error) {
+
+// rpc call logic layer
+func (o *DefaultOperator) DisConnect(disConn *proto.DisConnectRequest) (err error) {
 	rpcConnect := new(RpcConnect)
-	err = rpcConnect.DisConnect(conn)
+	err = rpcConnect.DisConnect(disConn)
 	return
 }

@@ -1,3 +1,8 @@
+/**
+ * Created by lock
+ * Date: 2019-08-12
+ * Time: 23:36
+ */
 package connect
 
 import (
@@ -21,7 +26,8 @@ import (
 var logicRpcClient client.XClient
 var once sync.Once
 
-type RpcConnect struct{}
+type RpcConnect struct {
+}
 
 func (rpc *RpcConnect) Connect(connReq *proto.ConnectRequest) (uid int, err error) {
 	reply := &proto.ConnectReply{}
@@ -41,53 +47,14 @@ func (rpc *RpcConnect) DisConnect(disConnReq *proto.DisConnectRequest) (err erro
 	return
 }
 
-func (c *Connect) InitLogicRpcClient() (err error) {
-	etcdConfigOpt := &store.Config{
-		ClientTLS:         nil,
-		TLS:               nil,
-		ConnectionTimeout: time.Duration(config.Conf.Common.CommonEtcd.ConnectionTimeout) * time.Second,
-		Bucket:            "",
-		PersistConnection: true,
-		Username:          config.Conf.Common.CommonEtcd.UserName,
-		Password:          config.Conf.Common.CommonEtcd.Password,
-	}
-	once.Do(func() {
-		d, e := etcdV3.NewEtcdDiscovery(
-			config.Conf.Common.CommonEtcd.BasePath,
-			config.Conf.Common.CommonEtcd.ServerPathLogic,
-			[]string{config.Conf.Common.CommonEtcd.Host},
-			true,
-			etcdConfigOpt)
-		if e != nil {
-			logrus.Fatalf("init connect rpc etcd discovery client fail : %s", e.Error())
-		}
-		logicRpcClient = client.NewXClient(config.Conf.Common.CommonEtcd.ServerPathLogic, client.Failtry, client.RandomSelect, d, client.DefaultOption)
-	})
-	if logicRpcClient == nil {
-		return errors.New("get rpc client nil")
-	}
-	return
-}
-func (c *Connect) InitConnectWebSocketRpcServer() (err error) {
-	var network, addr string
-	connectRpcAddress := strings.Split(config.Conf.Connect.ConnectRpcAddressWebSockts.Address, ",")
-	for _, bind := range connectRpcAddress {
-		if network, addr, err = tools.ParseNetwork(bind); err != nil {
-			logrus.Panicf("InitConnectWebSocketRpcServer ParseNetwork err : %s", err.Error())
-		}
-		logrus.Infof("Connect start run at --> %s:%s", network, addr)
-		go c.createConnectWebSocketsRpcServer(network, addr)
-	}
-	return
-}
-func (c *Connect) createConnectWebSocketsRpcServer(network, addr string) {
+func (c *Connect) createConnectWebsocktsRpcServer(network, addr string) {
 	s := server.NewServer()
 	c.addRegistryPlugin(s, network, addr)
 
-	err := s.RegisterName(config.Conf.Common.CommonEtcd.ServerPathLogic, new(RpcConnectPush), c.ServerId)
-	if err != nil {
-		logrus.Errorf("register RpcConnectPush error : %s ", err.Error())
-	}
+	//err := s.RegisterName(config.Conf.Common.CommonEtcd.ServerPathLogic, new(RpcConnectPush), c.ServerId)
+	//if err != nil {
+	//	logrus.Errorf("register RpcConnectPush error : %s ", err.Error())
+	//}
 	s.RegisterOnShutdown(func(s *server.Server) {
 		s.UnregisterAll()
 	})
@@ -107,54 +74,91 @@ func (c *Connect) addRegistryPlugin(s *server.Server, network, addr string) {
 	}
 	s.Plugins.Add(r)
 }
+func (c *Connect) InitLogicRpcClient() (err error) {
+	etcdConfigOption := &store.Config{
+		ClientTLS:         nil,
+		TLS:               nil,
+		ConnectionTimeout: time.Duration(config.Conf.Common.CommonEtcd.ConnectionTimeout) * time.Second,
+		Bucket:            "",
+		PersistConnection: true,
+		Username:          config.Conf.Common.CommonEtcd.UserName,
+		Password:          config.Conf.Common.CommonEtcd.Password,
+	}
+	once.Do(func() {
+		d, e := etcdV3.NewEtcdV3Discovery(
+			config.Conf.Common.CommonEtcd.BasePath,
+			config.Conf.Common.CommonEtcd.ServerPathLogic,
+			[]string{config.Conf.Common.CommonEtcd.Host}, true,
+			etcdConfigOption)
+		if e != nil {
+			logrus.Fatalf("init connect rpc etcd discovery client fail:%s", e.Error())
+		}
+		logicRpcClient = client.NewXClient(config.Conf.Common.CommonEtcd.ServerPathLogic, client.Failtry, client.RandomSelect, d, client.DefaultOption)
+	})
+	if logicRpcClient == nil {
+		return errors.New("get rpc client nil")
+	}
+	return
+}
+func (c *Connect) InitConnectWebsocketRpcServer() (err error) {
+	var network, addr string
+	connectRpcAddress := strings.Split(config.Conf.Connect.ConnectRpcAddressWebSockts.Address, ",")
+	for _, bind := range connectRpcAddress {
+		if network, addr, err = tools.ParseNetwork(bind); err != nil {
+			logrus.Panicf("InitConnectWebsocketRpcServer ParseNetwork error : %s", err)
+		}
+		logrus.Infof("Connect start run at-->%s:%s", network, addr)
+		go c.createConnectWebsocktsRpcServer(network, addr)
+	}
+	return
+}
 
-// MicroServe Instance of Connect
-type RpcConnectPush struct{}
+type RpcConnectPush struct {
+}
 
 func (rpc *RpcConnectPush) PushSingleMsg(ctx context.Context, pushMsgReq *proto.PushMsgRequest, successReply *proto.SuccessReply) (err error) {
 	var (
 		bucket  *Bucket
 		channel *Channel
 	)
-
-	logrus.Infof("rpc PushMsg : %v", pushMsgReq)
+	logrus.Info("rpc PushMsg :%v ", pushMsgReq)
 	if pushMsgReq == nil {
-		logrus.Errorf("rpc PushMsgReq is nil")
+		logrus.Errorf("rpc PushSingleMsg() args:(%v)", pushMsgReq)
 		return
 	}
 	bucket = DefaultServer.Bucket(pushMsgReq.UserId)
 	if channel = bucket.Channel(pushMsgReq.UserId); channel != nil {
 		err = channel.Push(&pushMsgReq.Msg)
-		logrus.Infof("rpc PushMsgReq channel push success : %v", pushMsgReq.Msg)
+		logrus.Infof("DefaultServer Channel err nil ,args: %v", pushMsgReq)
 		return
 	}
-	successReply.Msg = config.SuccessReplyMsg
 	successReply.Code = config.SuccessReplyCode
-	logrus.Infof("successReply : %v", successReply)
+	successReply.Msg = config.SuccessReplyMsg
+	logrus.Infof("successReply:%v", successReply)
 	return
 }
-func (rpc *RpcConnectPush) PushRoomMsg(ctx context.Context, pushMsgReq *proto.PushRoomMsgRequest, successReply *proto.SuccessReply) (err error) {
-	successReply.Msg = config.SuccessReplyMsg
+func (rpc *RpcConnectPush) PushRoomMsg(ctx context.Context, pushRoomMsgReq *proto.PushRoomMsgRequest, successReply *proto.SuccessReply) (err error) {
 	successReply.Code = config.SuccessReplyCode
-	logrus.Infof("PushRoomMsg : %v", pushMsgReq)
+	successReply.Msg = config.SuccessReplyMsg
+	logrus.Infof("PushRoomMsg msg %+v", pushRoomMsgReq)
 	for _, bucket := range DefaultServer.Buckets {
-		bucket.BroadcastRoom(pushMsgReq)
+		bucket.BroadcastRoom(pushRoomMsgReq)
 	}
 	return
 }
 func (rpc *RpcConnectPush) PushRoomCount(ctx context.Context, pushRoomMsgReq *proto.PushRoomMsgRequest, successReply *proto.SuccessReply) (err error) {
-	successReply.Msg = config.SuccessReplyMsg
 	successReply.Code = config.SuccessReplyCode
-	logrus.Infof("PushRoomCount : %v", pushRoomMsgReq)
+	successReply.Msg = config.SuccessReplyMsg
+	logrus.Infof("PushRoomCount msg %v", pushRoomMsgReq)
 	for _, bucket := range DefaultServer.Buckets {
 		bucket.BroadcastRoom(pushRoomMsgReq)
 	}
 	return
 }
 func (rpc *RpcConnectPush) PushRoomInfo(ctx context.Context, pushRoomMsgReq *proto.PushRoomMsgRequest, successReply *proto.SuccessReply) (err error) {
-	successReply.Msg = config.SuccessReplyMsg
 	successReply.Code = config.SuccessReplyCode
-	logrus.Infof("PushRoomInfo : %v", pushRoomMsgReq)
+	successReply.Msg = config.SuccessReplyMsg
+	logrus.Infof("connect,PushRoomInfo msg %+v", pushRoomMsgReq)
 	for _, bucket := range DefaultServer.Buckets {
 		bucket.BroadcastRoom(pushRoomMsgReq)
 	}

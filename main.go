@@ -6,6 +6,7 @@ import (
 	"gochat_my/api"
 	"gochat_my/connect"
 	"gochat_my/logic"
+	"gochat_my/site"
 	"gochat_my/task"
 	"os"
 	"os/signal"
@@ -31,7 +32,7 @@ func main() {
 	case "api":
 		api.New().Run()
 	case "site":
-		//return
+		site.New().Run()
 	default:
 		fmt.Println("Exiting , module not support!")
 		return

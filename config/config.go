@@ -60,12 +60,12 @@ type CommonRedis struct {
 }
 
 type ConnectConfig struct {
-	ConnectBase                ConnectBase                `mapstructure:"connect.toml-base"`
-	ConnectBucket              ConnectBucket              `mapstructure:"connect.toml-bucket"`
-	ConnectWebsocket           ConnectWebsocket           `mapstructure:"connect.toml-websocket"`
-	ConnectTcp                 ConnectTcp                 `mapstructure:"connect.toml-tcp"`
-	ConnectRpcAddressWebSockts ConnectRpcAddressWebsockts `mapstructure:"connect.toml-rpcAddress-websockts"`
-	ConnectRpcAddressTcp       ConnectRpcAddressTcp       `mapstructure:"connect.toml-rpcAddress-tcp"`
+	ConnectBase                ConnectBase                `mapstructure:"connect-base"`
+	ConnectBucket              ConnectBucket              `mapstructure:"connect-bucket"`
+	ConnectWebsocket           ConnectWebsocket           `mapstructure:"connect-websocket"`
+	ConnectTcp                 ConnectTcp                 `mapstructure:"connect-tcp"`
+	ConnectRpcAddressWebSockts ConnectRpcAddressWebsockts `mapstructure:"connect-rpcAddress-websockts"`
+	ConnectRpcAddressTcp       ConnectRpcAddressTcp       `mapstructure:"connect-rpcAddress-tcp"`
 }
 type ConnectBase struct {
 	CertPath string `mapstructure:"certPath"`

@@ -46,7 +46,7 @@ func (c *Connect) Run() {
 	})
 	c.ServerId = fmt.Sprintf("%s-%s", "ws", uuid.New().String())
 	// init connect layer rpc server ,task layer will call this
-	if err := c.InitConnectWebSocketRpcServer(); err != nil {
+	if err := c.InitConnectWebsocketRpcServer(); err != nil {
 		logrus.Panicf("InitConnectWebSocketRpcServer Fatal error : %s \n", err.Error())
 	}
 	// start connect layer server handler persistent connection

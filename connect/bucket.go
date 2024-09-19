@@ -1,3 +1,8 @@
+/**
+ * Created by lock
+ * Date: 2019-08-09
+ * Time: 15:18
+ */
 package connect
 
 import (
@@ -7,10 +12,10 @@ import (
 )
 
 type Bucket struct {
-	cLock         sync.RWMutex
-	chs           map[int]*Channel
+	cLock         sync.RWMutex     // protect the channels for chs
+	chs           map[int]*Channel // map sub key to a channel
 	bucketOptions BucketOptions
-	rooms         map[int]*Room
+	rooms         map[int]*Room // bucket room channels
 	routines      []chan *proto.PushRoomMsgRequest
 	routinesNum   uint64
 	broadcast     chan []byte
@@ -23,14 +28,14 @@ type BucketOptions struct {
 	RoutineSize   int
 }
 
-func NewBucket(options BucketOptions) (b *Bucket) {
+func NewBucket(bucketOptions BucketOptions) (b *Bucket) {
 	b = new(Bucket)
-	b.chs = make(map[int]*Channel, options.ChannelSize)
-	b.bucketOptions = options
-	b.routines = make([]chan *proto.PushRoomMsgRequest, options.RoutineAmount)
-	b.rooms = make(map[int]*Room, options.RoomSize)
+	b.chs = make(map[int]*Channel, bucketOptions.ChannelSize)
+	b.bucketOptions = bucketOptions
+	b.routines = make([]chan *proto.PushRoomMsgRequest, bucketOptions.RoutineAmount)
+	b.rooms = make(map[int]*Room, bucketOptions.RoomSize)
 	for i := uint64(0); i < b.bucketOptions.RoutineAmount; i++ {
-		c := make(chan *proto.PushRoomMsgRequest, options.RoutineSize)
+		c := make(chan *proto.PushRoomMsgRequest, bucketOptions.RoutineSize)
 		b.routines[i] = c
 		go b.PushRoom(c)
 	}
@@ -43,30 +48,18 @@ func (b *Bucket) PushRoom(ch chan *proto.PushRoomMsgRequest) {
 			arg  *proto.PushRoomMsgRequest
 			room *Room
 		)
-
 		arg = <-ch
-		if room = b.rooms[arg.RoomId]; room != nil {
+		if room = b.Room(arg.RoomId); room != nil {
 			room.Push(&arg.Msg)
 		}
 	}
 }
 
-func (b *Bucket) DeleteChannel(ch *Channel) {
-	var (
-		ok   bool
-		room *Room
-	)
-	b.cLock.Lock()
-	if ch, ok = b.chs[ch.userId]; ok {
-		room = b.chs[ch.userId].Room
-		delete(b.chs, ch.userId) // delete from bucket
-	}
-	if room != nil && room.RemoveChannel(ch) {
-		if room.drop == true {
-			delete(b.rooms, room.Id)
-		}
-	}
-	b.cLock.Unlock()
+func (b *Bucket) Room(rid int) (room *Room) {
+	b.cLock.RLock()
+	room, _ = b.rooms[rid]
+	b.cLock.RUnlock()
+	return
 }
 
 func (b *Bucket) Put(userId int, roomId int, ch *Channel) (err error) {
@@ -75,7 +68,6 @@ func (b *Bucket) Put(userId int, roomId int, ch *Channel) (err error) {
 		ok   bool
 	)
 	b.cLock.Lock()
-	defer b.cLock.Unlock()
 	if roomId != NoRoom {
 		if room, ok = b.rooms[roomId]; !ok {
 			room = NewRoom(roomId)
@@ -85,10 +77,32 @@ func (b *Bucket) Put(userId int, roomId int, ch *Channel) (err error) {
 	}
 	ch.userId = userId
 	b.chs[userId] = ch
+	b.cLock.Unlock()
+
 	if room != nil {
 		err = room.Put(ch)
 	}
 	return
+}
+
+func (b *Bucket) DeleteChannel(ch *Channel) {
+	var (
+		ok   bool
+		room *Room
+	)
+	b.cLock.RLock()
+	if ch, ok = b.chs[ch.userId]; ok {
+		room = b.chs[ch.userId].Room
+		//delete from bucket
+		delete(b.chs, ch.userId)
+	}
+	if room != nil && room.DeleteChannel(ch) {
+		// if room empty delete,will mark room.drop is true
+		if room.drop == true {
+			delete(b.rooms, room.Id)
+		}
+	}
+	b.cLock.RUnlock()
 }
 
 func (b *Bucket) Channel(userId int) (ch *Channel) {

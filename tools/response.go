@@ -1,3 +1,8 @@
+/**
+ * Created by lock
+ * Date: 2019-10-06
+ * Time: 23:30
+ */
 package tools
 
 import (
@@ -8,36 +13,37 @@ import (
 const (
 	CodeSuccess      = 0
 	CodeFail         = 1
-	CodeUnknowError  = -1
-	CodeSessionError = 4000
+	CodeUnknownError = -1
+	CodeSessionError = 40000
 )
 
 var MsgCodeMap = map[int]string{
-	CodeUnknowError:  "unknow error",
+	CodeUnknownError: "unKnow error",
 	CodeSuccess:      "success",
 	CodeFail:         "fail",
-	CodeSessionError: "session error",
+	CodeSessionError: "Session error",
 }
 
-func ResponseWithCode(c *gin.Context, code int, msg interface{}, data interface{}) {
+func SuccessWithMsg(c *gin.Context, msg interface{}, data interface{}) {
+	ResponseWithCode(c, CodeSuccess, msg, data)
+}
+
+func FailWithMsg(c *gin.Context, msg interface{}) {
+	ResponseWithCode(c, CodeFail, msg, nil)
+}
+
+func ResponseWithCode(c *gin.Context, msgCode int, msg interface{}, data interface{}) {
 	if msg == nil {
-		if val, ok := MsgCodeMap[code]; ok {
+		if val, ok := MsgCodeMap[msgCode]; ok {
 			msg = val
 		} else {
 			msg = MsgCodeMap[-1]
 		}
 	}
+
 	c.AbortWithStatusJSON(http.StatusOK, gin.H{
-		"code": code,
-		"msg":  msg,
-		"data": data,
+		"code":    msgCode,
+		"message": msg,
+		"data":    data,
 	})
-
-}
-
-func SuccessWtihMsg(c *gin.Context, msg interface{}, data interface{}) {
-	ResponseWithCode(c, http.StatusOK, msg, data)
-}
-func FailWtihMsg(c *gin.Context, msg interface{}) {
-	ResponseWithCode(c, http.StatusOK, msg, nil)
 }

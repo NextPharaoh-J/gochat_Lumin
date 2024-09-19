@@ -1,100 +1,108 @@
+/**
+ * Created by lock
+ * Date: 2019-10-06
+ * Time: 23:40
+ */
 package handler
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
 	"gochat_my/api/rpc"
 	"gochat_my/proto"
 	"gochat_my/tools"
 )
 
 type FormLogin struct {
-	userName string `form:"username" json:"username" binding:"required"`
-	password string `form:"password" json:"password" binding:"required"`
+	UserName string `form:"userName" json:"userName" binding:"required"`
+	Password string `form:"passWord" json:"passWord" binding:"required"`
 }
 
 func Login(c *gin.Context) {
-	var form FormLogin
-	if err := c.ShouldBindJSON(&form); err != nil {
-		//logrus.Errorf("api login formData bind err: %v", err)
-		tools.FailWtihMsg(c, err.Error())
+	var formLogin FormLogin
+	if err := c.ShouldBindBodyWith(&formLogin, binding.JSON); err != nil {
+		tools.FailWithMsg(c, err.Error())
+		return
 	}
 	req := &proto.LoginRequest{
-		Name:     form.userName,
-		Password: form.password,
+		Name:     formLogin.UserName,
+		Password: tools.Sha1(formLogin.Password),
 	}
 	code, authToken, msg := rpc.RpcLogicObj.Login(req)
 	if code == tools.CodeFail || authToken == "" {
-		tools.FailWtihMsg(c, msg)
+		tools.FailWithMsg(c, msg)
 		return
 	}
-	tools.SuccessWtihMsg(c, "login success", authToken)
+	tools.SuccessWithMsg(c, "login success", authToken)
 }
 
 type FormRegister struct {
-	userName string `form:"username" json:"username" binding:"required"`
-	password string `form:"password" json:"password" binding:"required"`
+	UserName string `form:"userName" json:"userName" binding:"required"`
+	Password string `form:"passWord" json:"passWord" binding:"required"`
 }
 
 func Register(c *gin.Context) {
-	var form FormRegister
-	if err := c.ShouldBindJSON(&form); err != nil {
-		//logrus.Errorf("api login formData bind err: %v", err)
-		tools.FailWtihMsg(c, err.Error())
+	var formRegister FormRegister
+	if err := c.ShouldBindBodyWith(&formRegister, binding.JSON); err != nil {
+		tools.FailWithMsg(c, err.Error())
+		return
 	}
 	req := &proto.RegisterRequest{
-		Name:     form.userName,
-		Password: form.password,
+		Name:     formRegister.UserName,
+		Password: tools.Sha1(formRegister.Password),
 	}
 	code, authToken, msg := rpc.RpcLogicObj.Register(req)
 	if code == tools.CodeFail || authToken == "" {
-		tools.FailWtihMsg(c, msg)
+		tools.FailWithMsg(c, msg)
 		return
 	}
-	tools.SuccessWtihMsg(c, "register success", authToken)
+	tools.SuccessWithMsg(c, "register success", authToken)
 }
 
 type FormCheckAuth struct {
-	AuthToken string `form:"auth_token" json:"auth_token" binding:"required"`
+	AuthToken string `form:"authToken" json:"authToken" binding:"required"`
 }
 
 func CheckAuth(c *gin.Context) {
-	var form FormCheckAuth
-	if err := c.ShouldBindJSON(&form); err != nil {
-		//logrus.Errorf("api login formData bind err: %v", err)
-		tools.FailWtihMsg(c, err.Error())
+	var formCheckAuth FormCheckAuth
+	if err := c.ShouldBindBodyWith(&formCheckAuth, binding.JSON); err != nil {
+		tools.FailWithMsg(c, err.Error())
+		return
 	}
+	authToken := formCheckAuth.AuthToken
 	req := &proto.CheckAuthRequest{
-		AuthToken: form.AuthToken,
+		AuthToken: authToken,
 	}
 	code, userId, userName := rpc.RpcLogicObj.CheckAuth(req)
 	if code == tools.CodeFail {
-		tools.FailWtihMsg(c, "auth fail")
+		tools.FailWithMsg(c, "auth fail")
 		return
 	}
-	var jsonReply = map[string]interface{}{
-		"userName": userName,
+	var jsonData = map[string]interface{}{
 		"userId":   userId,
+		"userName": userName,
 	}
-	tools.SuccessWtihMsg(c, "register success", jsonReply)
+	tools.SuccessWithMsg(c, "auth success", jsonData)
 }
 
 type FormLogout struct {
-	AuthToken string `form:"auth_token" json:"auth_token" binding:"required"`
+	AuthToken string `form:"authToken" json:"authToken" binding:"required"`
 }
 
 func Logout(c *gin.Context) {
-	var form FormLogout
-	if err := c.ShouldBindJSON(&form); err != nil {
-		//logrus.Errorf("api login formData bind err: %v", err)
-		tools.FailWtihMsg(c, err.Error())
-	}
-	req := &proto.LogoutRequest{
-		AuthToken: form.AuthToken,
-	}
-	code := rpc.RpcLogicObj.Logout(req)
-	if code == tools.CodeFail {
-		tools.FailWtihMsg(c, "logout fail")
+	var formLogout FormLogout
+	if err := c.ShouldBindBodyWith(&formLogout, binding.JSON); err != nil {
+		tools.FailWithMsg(c, err.Error())
 		return
 	}
-	tools.SuccessWtihMsg(c, "logout ok", nil)
+	authToken := formLogout.AuthToken
+	logoutReq := &proto.LogoutRequest{
+		AuthToken: authToken,
+	}
+	code := rpc.RpcLogicObj.Logout(logoutReq)
+	if code == tools.CodeFail {
+		tools.FailWithMsg(c, "logout fail!")
+		return
+	}
+	tools.SuccessWithMsg(c, "logout ok!", nil)
 }

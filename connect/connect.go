@@ -1,3 +1,8 @@
+/**
+ * Created by lock
+ * Date: 2019-08-09
+ * Time: 18:18
+ */
 package connect
 
 import (
@@ -5,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 	"gochat_my/config"
+	_ "net/http/pprof"
 	"runtime"
 	"time"
 )
@@ -20,18 +26,24 @@ func New() *Connect {
 }
 
 func (c *Connect) Run() {
-	connectConf := config.Conf.Connect
-	runtime.GOMAXPROCS(connectConf.ConnectBucket.CpuNum) //maximum cpus executing
+	// get Connect layer config
+	connectConfig := config.Conf.Connect
+
+	//set the maximum number of CPUs that can be executing
+	runtime.GOMAXPROCS(connectConfig.ConnectBucket.CpuNum)
+
+	//init logic layer rpc client, call logic layer rpc server
 	if err := c.InitLogicRpcClient(); err != nil {
-		logrus.Panicf("InitLogicRpcClient fail , err : %s", err.Error())
+		logrus.Panicf("InitLogicRpcClient err:%s", err.Error())
 	}
-	Buckets := make([]*Bucket, config.Conf.Connect.ConnectBucket.CpuNum)
-	for i := 0; i < config.Conf.Connect.ConnectBucket.CpuNum; i++ {
+	//init Connect layer rpc server, logic client will call this
+	Buckets := make([]*Bucket, connectConfig.ConnectBucket.CpuNum)
+	for i := 0; i < connectConfig.ConnectBucket.CpuNum; i++ {
 		Buckets[i] = NewBucket(BucketOptions{
-			ChannelSize:   connectConf.ConnectBucket.Channel,
-			RoomSize:      connectConf.ConnectBucket.Room,
-			RoutineSize:   connectConf.ConnectBucket.RoutineSize,
-			RoutineAmount: connectConf.ConnectBucket.RoutineAmount,
+			ChannelSize:   connectConfig.ConnectBucket.Channel,
+			RoomSize:      connectConfig.ConnectBucket.Room,
+			RoutineAmount: connectConfig.ConnectBucket.RoutineAmount,
+			RoutineSize:   connectConfig.ConnectBucket.RoutineSize,
 		})
 	}
 	operator := new(DefaultOperator)
@@ -45,12 +57,13 @@ func (c *Connect) Run() {
 		BroadcastSize:   512,
 	})
 	c.ServerId = fmt.Sprintf("%s-%s", "ws", uuid.New().String())
-	// init connect layer rpc server ,task layer will call this
+	//init Connect layer rpc server ,task layer will call this
 	if err := c.InitConnectWebsocketRpcServer(); err != nil {
-		logrus.Panicf("InitConnectWebSocketRpcServer Fatal error : %s \n", err.Error())
+		logrus.Panicf("InitConnectWebsocketRpcServer Fatal error: %s \n", err.Error())
 	}
-	// start connect layer server handler persistent connection
-	if err := c.InitWebSocket(); err != nil {
-		logrus.Panicf("Connect layer InitWebSocket error : %s \n", err.Error())
+
+	//start Connect layer server handler persistent connection
+	if err := c.InitWebsocket(); err != nil {
+		logrus.Panicf("Connect layer InitWebsocket() error:  %s \n", err.Error())
 	}
 }

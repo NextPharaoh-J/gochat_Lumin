@@ -1,3 +1,8 @@
+/**
+ * Created by lock
+ * Date: 2019-08-09
+ * Time: 15:18
+ */
 package connect
 
 import (
@@ -6,7 +11,7 @@ import (
 	"net"
 )
 
-// user Connect session
+// in fact, Channel it's a user Connect session
 type Channel struct {
 	Room      *Room
 	Next      *Channel
@@ -14,18 +19,20 @@ type Channel struct {
 	broadcast chan *proto.Msg
 	userId    int
 	conn      *websocket.Conn
-	connTCP   *net.TCPConn
+	connTcp   *net.TCPConn
 }
 
 func NewChannel(size int) (c *Channel) {
-	return &Channel{
-		broadcast: make(chan *proto.Msg, size),
-	}
+	c = new(Channel)
+	c.broadcast = make(chan *proto.Msg, size)
+	c.Next = nil
+	c.Prev = nil
+	return
 }
 
-func (c *Channel) Push(msg *proto.Msg) (err error) {
+func (ch *Channel) Push(msg *proto.Msg) (err error) {
 	select {
-	case c.broadcast <- msg:
+	case ch.broadcast <- msg:
 	default:
 	}
 	return

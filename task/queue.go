@@ -1,3 +1,8 @@
+/**
+ * Created by lock
+ * Date: 2019-08-13
+ * Time: 10:13
+ */
 package task
 
 import (
@@ -18,22 +23,20 @@ func (task *Task) InitQueueRedisClient() (err error) {
 	}
 	RedisClient = tools.GetRedisInstance(redisOpt)
 	if pong, err := RedisClient.Ping().Result(); err != nil {
-		logrus.Infof("RedisClient Ping Result pong : %s, err : %s ", pong, err.Error())
-		return err
+		logrus.Infof("RedisClient Ping Result pong: %s,  err: %s", pong, err)
 	}
 	go func() {
 		for {
 			var result []string
-			// 10s timeout: if queue empty 10s throw info,or pop a message from RedisQueue
+			//10s timeout
 			result, err = RedisClient.BRPop(time.Second*10, config.QueueName).Result()
 			if err != nil {
-				logrus.Infof("RedisClient BRPop timeout, Err : %s ", err.Error())
+				logrus.Infof("task queue block timeout,no msg err:%s", err.Error())
 			}
-			if len(result) >= 2 { //data struct unzip [name,value]
+			if len(result) >= 2 {
 				task.Push(result[1])
 			}
 		}
 	}()
-
 	return
 }

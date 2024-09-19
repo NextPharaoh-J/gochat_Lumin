@@ -1,8 +1,14 @@
+/**
+ * Created by lock
+ * Date: 2019-08-12
+ * Time: 15:44
+ */
 package logic
 
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"github.com/go-redis/redis"
 	"github.com/rcrowley/go-metrics"
 	"github.com/rpcxio/rpcx-etcd/serverplugin"
@@ -15,10 +21,8 @@ import (
 	"time"
 )
 
-var (
-	RedisClient     *redis.Client
-	RedisSessClient *redis.Client
-)
+var RedisClient *redis.Client
+var RedisSessClient *redis.Client
 
 func (logic *Logic) InitPublishRedisClient() (err error) {
 	redisOpt := tools.RedisOption{
@@ -28,38 +32,43 @@ func (logic *Logic) InitPublishRedisClient() (err error) {
 	}
 	RedisClient = tools.GetRedisInstance(redisOpt)
 	if pong, err := RedisClient.Ping().Result(); err != nil {
-		logrus.Infof("RedisClient Ping Result pong : %s, err : %s ", pong, err.Error())
-		return err
+		logrus.Infof("RedisCli Ping Result pong: %s,  err: %s", pong, err)
 	}
+	//this can change use another redis save session data
 	RedisSessClient = RedisClient
-	return nil
+	return err
 }
+
 func (logic *Logic) InitRpcServer() (err error) {
 	var network, addr string
-	rpcAddrList := strings.Split(config.Conf.Logic.LogicBase.RpcAddress, ",")
-	for _, bind := range rpcAddrList {
+	// a host multi port case
+	rpcAddressList := strings.Split(config.Conf.Logic.LogicBase.RpcAddress, ",")
+	for _, bind := range rpcAddressList {
 		if network, addr, err = tools.ParseNetwork(bind); err != nil {
-			logrus.Panicf("InitLogiRpc ParseNetwork err ： %s", err.Error())
+			logrus.Panicf("InitLogicRpc ParseNetwork error : %s", err.Error())
 		}
-		logrus.Infof("logic start run at--> %s:%s", network, addr)
+		logrus.Infof("logic start run at-->%s:%s", network, addr)
 		go logic.createRpcServer(network, addr)
 	}
 	return
 }
-func (logic *Logic) createRpcServer(network, addr string) {
+
+func (logic *Logic) createRpcServer(network string, addr string) {
 	s := server.NewServer()
 	logic.addRegistryPlugin(s, network, addr)
-	err := s.RegisterName(config.Conf.Common.CommonEtcd.ServerPathLogic, new(RpcLogic), logic.ServerId)
+	// serverId must be unique
+	//err := s.RegisterName(config.Conf.Common.CommonEtcd.ServerPathLogic, new(RpcLogic), fmt.Sprintf("%s", config.Conf.Logic.LogicBase.ServerId))
+	err := s.RegisterName(config.Conf.Common.CommonEtcd.ServerPathLogic, new(RpcLogic), fmt.Sprintf("%s", logic.ServerId))
 	if err != nil {
-		logrus.Errorf("register error : %s ", err.Error())
+		logrus.Errorf("register error:%s", err.Error())
 	}
 	s.RegisterOnShutdown(func(s *server.Server) {
 		s.UnregisterAll()
 	})
 	s.Serve(network, addr)
 }
-func (logic *Logic) addRegistryPlugin(s *server.Server, network, addr string) {
-	// 将 服务信息注册到 etcd
+
+func (logic *Logic) addRegistryPlugin(s *server.Server, network string, addr string) {
 	r := &serverplugin.EtcdV3RegisterPlugin{
 		ServiceAddress: network + "@" + addr,
 		EtcdServers:    []string{config.Conf.Common.CommonEtcd.Host},
@@ -69,28 +78,9 @@ func (logic *Logic) addRegistryPlugin(s *server.Server, network, addr string) {
 	}
 	err := r.Start()
 	if err != nil {
-		logrus.Fatal(err.Error())
+		logrus.Fatal(err)
 	}
 	s.Plugins.Add(r)
-}
-
-func (logic *Logic) getUserKey(authKey string) string {
-	var returnKey bytes.Buffer
-	returnKey.WriteString(config.RedisPrefix)
-	returnKey.WriteString(authKey)
-	return returnKey.String()
-}
-func (logic *Logic) getRoomUserKey(authKey string) string {
-	var returnKey bytes.Buffer
-	returnKey.WriteString(config.RedisRoomPrefix)
-	returnKey.WriteString(authKey)
-	return returnKey.String()
-}
-func (logic *Logic) getRoomOnlineCountKey(authKey string) string {
-	var returnKey bytes.Buffer
-	returnKey.WriteString(config.RedisRoomOnlinePrefix)
-	returnKey.WriteString(authKey)
-	return returnKey.String()
 }
 
 func (logic *Logic) RedisPublishChannel(serverId string, toUserId int, msg []byte) (err error) {
@@ -102,64 +92,94 @@ func (logic *Logic) RedisPublishChannel(serverId string, toUserId int, msg []byt
 	}
 	redisMsgStr, err := json.Marshal(redisMsg)
 	if err != nil {
-		logrus.Errorf("RedisPublishChannel json.Marshal err : %s", err.Error())
-		return
+		logrus.Errorf("logic,RedisPublishChannel Marshal err:%s", err.Error())
+		return err
 	}
 	redisChannel := config.QueueName
-	if err = RedisClient.RPush(redisChannel, redisMsgStr).Err(); err != nil {
-		logrus.Errorf("RedisPublishChannel RPush err : %s", err.Error())
-		return
+	if err := RedisClient.LPush(redisChannel, redisMsgStr).Err(); err != nil {
+		logrus.Errorf("logic,lpush err:%s", err.Error())
+		return err
 	}
 	return
 }
-func (logic *Logic) RedisPublishRoomInfo(roomId int, count int, roomUserInfo map[string]string, msg []byte) (err error) {
+
+func (logic *Logic) RedisPublishRoomInfo(roomId int, count int, RoomUserInfo map[string]string, msg []byte) (err error) {
 	var redisMsg = &proto.RedisMsg{
 		Op:           config.OpRoomSend,
 		RoomId:       roomId,
 		Count:        count,
-		RoomUserInfo: roomUserInfo,
 		Msg:          msg,
+		RoomUserInfo: RoomUserInfo,
 	}
 	redisMsgByte, err := json.Marshal(redisMsg)
 	if err != nil {
-		logrus.Errorf("RedisPublishRoomInfo json.Marshal err : %s", err.Error())
+		logrus.Errorf("logic,RedisPublishRoomInfo redisMsg error : %s", err.Error())
+		return
 	}
 	err = RedisClient.LPush(config.QueueName, redisMsgByte).Err()
 	if err != nil {
-		logrus.Errorf("RedisPublishRoomInfo LPush err : %s", err.Error())
+		logrus.Errorf("logic,RedisPublishRoomInfo redisMsg error : %s", err.Error())
+		return
 	}
 	return
 }
-func (logic *Logic) RedisPublishRoomCount(roomId int, count int) (err error) {
+
+func (logic *Logic) RedisPushRoomCount(roomId int, count int) (err error) {
 	var redisMsg = &proto.RedisMsg{
-		Op:     config.OpRoomSend,
+		Op:     config.OpRoomCountSend,
 		RoomId: roomId,
 		Count:  count,
 	}
 	redisMsgByte, err := json.Marshal(redisMsg)
 	if err != nil {
-		logrus.Errorf("RedisPublishRoomInfo json.Marshal err : %s", err.Error())
+		logrus.Errorf("logic,RedisPushRoomCount redisMsg error : %s", err.Error())
+		return
 	}
 	err = RedisClient.LPush(config.QueueName, redisMsgByte).Err()
 	if err != nil {
-		logrus.Errorf("RedisPublishRoomInfo LPush err : %s", err.Error())
+		logrus.Errorf("logic,RedisPushRoomCount redisMsg error : %s", err.Error())
+		return
 	}
 	return
 }
-func (logic *Logic) RedisPushRoomInfo(roomId int, count int, RoomUserInfo map[string]string) (err error) {
+
+func (logic *Logic) RedisPushRoomInfo(roomId int, count int, roomUserInfo map[string]string) (err error) {
 	var redisMsg = &proto.RedisMsg{
-		Op:           config.OpRoomSend,
+		Op:           config.OpRoomInfoSend,
 		RoomId:       roomId,
 		Count:        count,
-		RoomUserInfo: RoomUserInfo,
+		RoomUserInfo: roomUserInfo,
 	}
 	redisMsgByte, err := json.Marshal(redisMsg)
 	if err != nil {
-		logrus.Errorf("RedisPublishRoomInfo json.Marshal err : %s", err.Error())
+		logrus.Errorf("logic,RedisPushRoomInfo redisMsg error : %s", err.Error())
+		return
 	}
 	err = RedisClient.LPush(config.QueueName, redisMsgByte).Err()
 	if err != nil {
-		logrus.Errorf("RedisPublishRoomInfo LPush err : %s", err.Error())
+		logrus.Errorf("logic,RedisPushRoomInfo redisMsg error : %s", err.Error())
+		return
 	}
 	return
+}
+
+func (logic *Logic) getRoomUserKey(authKey string) string {
+	var returnKey bytes.Buffer
+	returnKey.WriteString(config.RedisRoomPrefix)
+	returnKey.WriteString(authKey)
+	return returnKey.String()
+}
+
+func (logic *Logic) getRoomOnlineCountKey(authKey string) string {
+	var returnKey bytes.Buffer
+	returnKey.WriteString(config.RedisRoomOnlinePrefix)
+	returnKey.WriteString(authKey)
+	return returnKey.String()
+}
+
+func (logic *Logic) getUserKey(authKey string) string {
+	var returnKey bytes.Buffer
+	returnKey.WriteString(config.RedisPrefix)
+	returnKey.WriteString(authKey)
+	return returnKey.String()
 }

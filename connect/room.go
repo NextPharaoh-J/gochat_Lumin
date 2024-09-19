@@ -1,3 +1,8 @@
+/**
+ * Created by lock
+ * Date: 2019-08-09
+ * Time: 15:18
+ */
 package connect
 
 import (
@@ -11,38 +16,26 @@ const NoRoom = -1
 
 type Room struct {
 	Id          int
-	OnlineCount int
+	OnlineCount int // room online user count
 	rLock       sync.RWMutex
-	drop        bool // room is dropped
+	drop        bool // make room is live
 	next        *Channel
 }
 
-func NewRoom(id int) *Room {
+func NewRoom(roomId int) *Room {
 	room := new(Room)
-	room.Id = id
+	room.Id = roomId
 	room.drop = false
 	room.next = nil
 	room.OnlineCount = 0
 	return room
 }
 
-func (r *Room) Push(msg *proto.Msg) { // send a message in room
-	r.rLock.RLock()
-	for ch := r.next; ch != nil; ch = ch.Next {
-		if err := ch.Push(msg); err != nil {
-			logrus.Infof("push msg err : %s", err.Error())
-		}
-	}
-	r.rLock.Unlock()
-	return
-}
-
 func (r *Room) Put(ch *Channel) (err error) {
-	// a room include many channel (user session)
-	// channel is self-linked by doubly linked list
+	//doubly linked list
 	r.rLock.Lock()
 	defer r.rLock.Unlock()
-	if !r.drop { // ch.Next 代表上一条信息，room.next表示最后加入的ch
+	if !r.drop {
 		if r.next != nil {
 			r.next.Prev = ch
 		}
@@ -56,22 +49,34 @@ func (r *Room) Put(ch *Channel) (err error) {
 	return
 }
 
-func (r *Room) RemoveChannel(ch *Channel) bool {
-	r.rLock.Lock()
-	defer r.rLock.Unlock()
+func (r *Room) Push(msg *proto.Msg) {
+	r.rLock.RLock()
+	for ch := r.next; ch != nil; ch = ch.Next {
+		if err := ch.Push(msg); err != nil {
+			logrus.Infof("push msg err:%s", err.Error())
+		}
+	}
+	r.rLock.RUnlock()
+	return
+}
+
+func (r *Room) DeleteChannel(ch *Channel) bool {
+	r.rLock.RLock()
 	if ch.Next != nil {
+		//if not footer
 		ch.Next.Prev = ch.Prev
 	}
 	if ch.Prev != nil {
+		// if not header
 		ch.Prev.Next = ch.Next
 	} else {
 		r.next = ch.Next
 	}
-
 	r.OnlineCount--
 	r.drop = false
 	if r.OnlineCount <= 0 {
 		r.drop = true
 	}
+	r.rLock.RUnlock()
 	return r.drop
 }

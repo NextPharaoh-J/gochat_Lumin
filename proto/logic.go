@@ -1,9 +1,15 @@
+/**
+ * Created by lock
+ * Date: 2019-08-10
+ * Time: 18:38
+ */
 package proto
 
 type LoginRequest struct {
 	Name     string
 	Password string
 }
+
 type LoginResponse struct {
 	Code      int
 	AuthToken string
@@ -12,6 +18,7 @@ type LoginResponse struct {
 type GetUserInfoRequest struct {
 	UserId int
 }
+
 type GetUserInfoResponse struct {
 	Code     int
 	UserId   int
@@ -22,6 +29,7 @@ type RegisterRequest struct {
 	Name     string
 	Password string
 }
+
 type RegisterReply struct {
 	Code      int
 	AuthToken string
@@ -30,6 +38,7 @@ type RegisterReply struct {
 type LogoutRequest struct {
 	AuthToken string
 }
+
 type LogoutResponse struct {
 	Code int
 }
@@ -37,6 +46,7 @@ type LogoutResponse struct {
 type CheckAuthRequest struct {
 	AuthToken string
 }
+
 type CheckAuthResponse struct {
 	Code     int
 	UserId   int
@@ -48,13 +58,16 @@ type ConnectRequest struct {
 	RoomId    int    `json:"roomId"`
 	ServerId  string `json:"serverId"`
 }
+
+type ConnectReply struct {
+	UserId int
+}
+
 type DisConnectRequest struct {
 	RoomId int
 	UserId int
 }
-type ConnectReply struct {
-	UserId int
-}
+
 type DisConnectReply struct {
 	Has bool
 }
@@ -70,6 +83,7 @@ type Send struct {
 	Op           int    `json:"op"`
 	CreateTime   string `json:"createTime"`
 }
+
 type SendTcp struct {
 	Code         int    `json:"code"`
 	Msg          string `json:"msg"`

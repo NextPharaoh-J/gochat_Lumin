@@ -1,3 +1,8 @@
+/**
+ * Created by lock
+ * Date: 2019-08-13
+ * Time: 10:50
+ */
 package task
 
 import (
@@ -28,12 +33,21 @@ func (task *Task) GoPush() {
 	}
 }
 
+func (task *Task) processSinglePush(ch chan *PushParams) {
+	var arg *PushParams
+	for {
+		arg = <-ch
+		//@todo when arg.ServerId server is down, user could be reconnect other serverId but msg in queue no consume
+		task.pushSingleToConnect(arg.ServerId, arg.UserId, arg.Msg)
+	}
+}
+
 func (task *Task) Push(msg string) {
 	m := &proto.RedisMsg{}
 	if err := json.Unmarshal([]byte(msg), m); err != nil {
-		logrus.Infof("json.Unmarshal err:%v", err.Error())
+		logrus.Infof(" json.Unmarshal err:%v ", err)
 	}
-	logrus.Infof("push msg info %d , op is %d", m.RoomId, m.Op)
+	logrus.Infof("push msg info %d,op is:%d", m.RoomId, m.Op)
 	switch m.Op {
 	case config.OpSingleSend:
 		pushChannel[rand.Int()%config.Conf.Task.TaskBase.PushChan] <- &PushParams{
@@ -47,14 +61,5 @@ func (task *Task) Push(msg string) {
 		task.broadcastRoomCountToConnect(m.RoomId, m.Count)
 	case config.OpRoomInfoSend:
 		task.broadcastRoomInfoToConnect(m.RoomId, m.RoomUserInfo)
-	}
-}
-
-func (task *Task) processSinglePush(ch chan *PushParams) {
-	var arg *PushParams
-	for {
-		arg = <-ch
-		// @todo when arg.ServerId server is down ,user could reconnect other ServerId but msg in queue no consume
-		task.pushSingleToConnect(arg.ServerId, arg.UserId, arg.Msg)
 	}
 }

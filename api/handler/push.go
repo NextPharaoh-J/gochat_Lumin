@@ -1,7 +1,13 @@
+/**
+ * Created by lock
+ * Date: 2019-10-06
+ * Time: 23:40
+ */
 package handler
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
 	"gochat_my/api/rpc"
 	"gochat_my/config"
 	"gochat_my/proto"
@@ -11,142 +17,133 @@ import (
 
 type FormPush struct {
 	Msg       string `form:"msg" json:"msg" binding:"required"`
-	ToUserId  string `form:"to_user_id" json:"to_user_id" binding:"required"`
-	RoomId    int    `form:"room_id" json:"room_id" binding:"required"`
-	AuthToken string `form:"auth_token" json:"auth_token" binding:"required"`
+	ToUserId  string `form:"toUserId" json:"toUserId" binding:"required"`
+	RoomId    int    `form:"roomId" json:"roomId" binding:"required"`
+	AuthToken string `form:"authToken" json:"authToken" binding:"required"`
 }
 
 func Push(c *gin.Context) {
-	var (
-		form         FormPush
-		code         int
-		toUserId     int
-		fromUserId   int
-		toUserName   string
-		fromUserName string
-		rpcMsg       string
-	)
-	if err := c.ShouldBind(&form); err != nil {
-		tools.FailWtihMsg(c, err.Error())
+	var formPush FormPush
+	if err := c.ShouldBindBodyWith(&formPush, binding.JSON); err != nil {
+		tools.FailWithMsg(c, err.Error())
 		return
 	}
-	toUserId, _ = strconv.Atoi(form.ToUserId)
-	getUserNameReq := &proto.GetUserInfoRequest{UserId: toUserId}
-	code, toUserName = rpc.RpcLogicObj.GetUserNameByUserId(getUserNameReq)
+	authToken := formPush.AuthToken
+	msg := formPush.Msg
+	toUserId := formPush.ToUserId
+	toUserIdInt, _ := strconv.Atoi(toUserId)
+	getUserNameReq := &proto.GetUserInfoRequest{UserId: toUserIdInt}
+	code, toUserName := rpc.RpcLogicObj.GetUserNameByUserId(getUserNameReq)
 	if code == tools.CodeFail {
-		tools.FailWtihMsg(c, "rpc fail get toUserName ")
+		tools.FailWithMsg(c, "rpc fail get friend userName")
 		return
 	}
-	checkAuthReq := &proto.CheckAuthRequest{AuthToken: form.AuthToken}
-	code, fromUserId, fromUserName = rpc.RpcLogicObj.CheckAuth(checkAuthReq)
+	checkAuthReq := &proto.CheckAuthRequest{AuthToken: authToken}
+	code, fromUserId, fromUserName := rpc.RpcLogicObj.CheckAuth(checkAuthReq)
 	if code == tools.CodeFail {
-		tools.FailWtihMsg(c, "rpc fail checkAuth")
+		tools.FailWithMsg(c, "rpc fail get self info")
 		return
 	}
-	roomId := form.RoomId
+	roomId := formPush.RoomId
 	req := &proto.Send{
-		Msg:          form.Msg,
-		ToUserId:     toUserId,
-		ToUserName:   toUserName,
+		Msg:          msg,
 		FromUserId:   fromUserId,
 		FromUserName: fromUserName,
+		ToUserId:     toUserIdInt,
+		ToUserName:   toUserName,
 		RoomId:       roomId,
 		Op:           config.OpSingleSend,
 	}
-	code, rpcMsg = rpc.RpcLogicObj.Push(req)
+	code, rpcMsg := rpc.RpcLogicObj.Push(req)
 	if code == tools.CodeFail {
-		tools.FailWtihMsg(c, rpcMsg)
+		tools.FailWithMsg(c, rpcMsg)
 		return
 	}
-	tools.SuccessWtihMsg(c, "ok", nil)
+	tools.SuccessWithMsg(c, "ok", nil)
+	return
 }
 
 type FormRoom struct {
-	AuthToken string `form:"auth_token" json:"auth_token" binding:"required"`
-	RoomId    int    `form:"room_id" json:"room_id" binding:"required"`
+	AuthToken string `form:"authToken" json:"authToken" binding:"required"`
 	Msg       string `form:"msg" json:"msg" binding:"required"`
+	RoomId    int    `form:"roomId" json:"roomId" binding:"required"`
 }
 
 func PushRoom(c *gin.Context) {
-	var (
-		form         FormRoom
-		authcode     int
-		code         int
-		fromUserId   int
-		fromUserName string
-	)
-	if err := c.ShouldBind(&form); err != nil {
-		tools.FailWtihMsg(c, err.Error())
+	var formRoom FormRoom
+	if err := c.ShouldBindBodyWith(&formRoom, binding.JSON); err != nil {
+		tools.FailWithMsg(c, err.Error())
 		return
 	}
-	CheckAuthReq := &proto.CheckAuthRequest{AuthToken: form.AuthToken}
-	authcode, fromUserId, fromUserName = rpc.RpcLogicObj.CheckAuth(CheckAuthReq)
-	if authcode == tools.CodeFail {
-		tools.FailWtihMsg(c, "rpc fail get self info ")
+	authToken := formRoom.AuthToken
+	msg := formRoom.Msg
+	roomId := formRoom.RoomId
+	checkAuthReq := &proto.CheckAuthRequest{AuthToken: authToken}
+	authCode, fromUserId, fromUserName := rpc.RpcLogicObj.CheckAuth(checkAuthReq)
+	if authCode == tools.CodeFail {
+		tools.FailWithMsg(c, "rpc fail get self info")
 		return
 	}
 	req := &proto.Send{
-		Msg:          form.Msg,
+		Msg:          msg,
 		FromUserId:   fromUserId,
 		FromUserName: fromUserName,
-		RoomId:       form.RoomId,
+		RoomId:       roomId,
 		Op:           config.OpRoomSend,
 	}
-	code, _ = rpc.RpcLogicObj.PushRoom(req)
+	code, msg := rpc.RpcLogicObj.PushRoom(req)
 	if code == tools.CodeFail {
-		tools.FailWtihMsg(c, "rpc push room msg fail")
+		tools.FailWithMsg(c, "rpc push room msg fail!")
 		return
 	}
-	tools.SuccessWtihMsg(c, "ok", nil)
+	tools.SuccessWithMsg(c, "ok", msg)
+	return
 }
 
 type FormCount struct {
-	RoomId int `form:"room_id" json:"room_id" binding:"required"`
+	RoomId int `form:"roomId" json:"roomId" binding:"required"`
 }
 
 func Count(c *gin.Context) {
-	var (
-		form FormCount
-		code int
-	)
-	if err := c.ShouldBind(&form); err != nil {
-		tools.FailWtihMsg(c, err.Error())
+	var formCount FormCount
+	if err := c.ShouldBindBodyWith(&formCount, binding.JSON); err != nil {
+		tools.FailWithMsg(c, err.Error())
 		return
 	}
+	roomId := formCount.RoomId
 	req := &proto.Send{
-		RoomId: form.RoomId,
-		Op:     config.OpRoomSend,
+		RoomId: roomId,
+		Op:     config.OpRoomCountSend,
 	}
-	code, _ = rpc.RpcLogicObj.Count(req)
+	code, msg := rpc.RpcLogicObj.Count(req)
 	if code == tools.CodeFail {
-		tools.FailWtihMsg(c, "rpc get room count fail")
+		tools.FailWithMsg(c, "rpc get room count fail!")
 		return
 	}
-	tools.SuccessWtihMsg(c, "ok", nil)
+	tools.SuccessWithMsg(c, "ok", msg)
+	return
 }
 
 type FormRoomInfo struct {
-	RoomId int `form:"room_id" json:"room_id" binding:"required"`
+	RoomId int `form:"roomId" json:"roomId" binding:"required"`
 }
 
 func GetRoomInfo(c *gin.Context) {
-	var (
-		form FormRoomInfo
-		code int
-		msg  string
-	)
-	if err := c.ShouldBind(&form); err != nil {
-		tools.FailWtihMsg(c, err.Error())
+	var formRoomInfo FormRoomInfo
+	if err := c.ShouldBindBodyWith(&formRoomInfo, binding.JSON); err != nil {
+		tools.FailWithMsg(c, err.Error())
 		return
 	}
+	roomId := formRoomInfo.RoomId
 	req := &proto.Send{
-		RoomId: form.RoomId,
-		Op:     config.OpRoomSend,
+		RoomId: roomId,
+		Op:     config.OpRoomInfoSend,
 	}
-	code, msg = rpc.RpcLogicObj.PushRoom(req)
+	code, msg := rpc.RpcLogicObj.GetRoomInfo(req)
 	if code == tools.CodeFail {
-		tools.FailWtihMsg(c, "rpc get room info fail")
+		tools.FailWithMsg(c, "rpc get room info fail!")
 		return
 	}
-	tools.SuccessWtihMsg(c, msg, nil)
+	tools.SuccessWithMsg(c, "ok", msg)
+	return
 }

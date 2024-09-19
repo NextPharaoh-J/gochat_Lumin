@@ -4,20 +4,22 @@ import (
 	"fmt"
 	"github.com/sirupsen/logrus"
 	"gochat_my/config"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"path"
 )
 
-type Site struct{}
+type Site struct {
+}
 
 func New() *Site {
 	return &Site{}
 }
 
 func notFound(w http.ResponseWriter, r *http.Request) {
-	// 404 back
-	data, _ := os.ReadFile("./site/index.html")
+	// Here you can send your custom 404 back.
+	data, _ := ioutil.ReadFile("./site/index.html")
 	_, _ = fmt.Fprintf(w, string(data))
 	return
 }
@@ -25,7 +27,7 @@ func notFound(w http.ResponseWriter, r *http.Request) {
 func server(fs http.FileSystem) http.Handler {
 	fileServer := http.FileServer(fs)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		filePath := path.Clean(r.URL.Path) //legalize file path
+		filePath := path.Clean("./site" + r.URL.Path)
 		_, err := os.Stat(filePath)
 		if err != nil {
 			notFound(w, r)
@@ -36,7 +38,8 @@ func server(fs http.FileSystem) http.Handler {
 }
 
 func (s *Site) Run() {
-	port := config.Conf.Site.SiteBase.ListenPort
+	siteConfig := config.Conf.Site
+	port := siteConfig.SiteBase.ListenPort
 	addr := fmt.Sprintf(":%d", port)
 	logrus.Fatal(http.ListenAndServe(addr, server(http.Dir("./site"))))
 }

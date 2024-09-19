@@ -8,6 +8,7 @@ package connect
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/rcrowley/go-metrics"
 	"github.com/rpcxio/libkv/store"
 	etcdV3 "github.com/rpcxio/rpcx-etcd/client"
@@ -29,51 +30,6 @@ var once sync.Once
 type RpcConnect struct {
 }
 
-func (rpc *RpcConnect) Connect(connReq *proto.ConnectRequest) (uid int, err error) {
-	reply := &proto.ConnectReply{}
-	err = logicRpcClient.Call(context.Background(), "Connect", connReq, reply)
-	if err != nil {
-		logrus.Fatalf("fail to call : %v", err)
-	}
-	uid = reply.UserId
-	logrus.Infof("connect logic UserId:%d", uid)
-	return
-}
-func (rpc *RpcConnect) DisConnect(disConnReq *proto.DisConnectRequest) (err error) {
-	reply := &proto.DisConnectReply{}
-	if err = logicRpcClient.Call(context.Background(), "DisConnect", disConnReq, reply); err != nil {
-		logrus.Fatalf("fail to call : %v", err)
-	}
-	return
-}
-
-func (c *Connect) createConnectWebsocktsRpcServer(network, addr string) {
-	s := server.NewServer()
-	c.addRegistryPlugin(s, network, addr)
-
-	//err := s.RegisterName(config.Conf.Common.CommonEtcd.ServerPathLogic, new(RpcConnectPush), c.ServerId)
-	//if err != nil {
-	//	logrus.Errorf("register RpcConnectPush error : %s ", err.Error())
-	//}
-	s.RegisterOnShutdown(func(s *server.Server) {
-		s.UnregisterAll()
-	})
-	s.Serve(network, addr)
-}
-func (c *Connect) addRegistryPlugin(s *server.Server, network, addr string) {
-	r := &serverplugin.EtcdV3RegisterPlugin{
-		ServiceAddress: network + "@" + addr,
-		EtcdServers:    []string{config.Conf.Common.CommonEtcd.Host},
-		BasePath:       config.Conf.Common.CommonEtcd.BasePath,
-		Metrics:        metrics.NewRegistry(),
-		UpdateInterval: time.Minute,
-	}
-	err := r.Start()
-	if err != nil {
-		logrus.Fatal(err.Error())
-	}
-	s.Plugins.Add(r)
-}
 func (c *Connect) InitLogicRpcClient() (err error) {
 	etcdConfigOption := &store.Config{
 		ClientTLS:         nil,
@@ -88,8 +44,10 @@ func (c *Connect) InitLogicRpcClient() (err error) {
 		d, e := etcdV3.NewEtcdV3Discovery(
 			config.Conf.Common.CommonEtcd.BasePath,
 			config.Conf.Common.CommonEtcd.ServerPathLogic,
-			[]string{config.Conf.Common.CommonEtcd.Host}, true,
-			etcdConfigOption)
+			[]string{config.Conf.Common.CommonEtcd.Host},
+			true,
+			etcdConfigOption,
+		)
 		if e != nil {
 			logrus.Fatalf("init connect rpc etcd discovery client fail:%s", e.Error())
 		}
@@ -100,6 +58,26 @@ func (c *Connect) InitLogicRpcClient() (err error) {
 	}
 	return
 }
+
+func (rpc *RpcConnect) Connect(connReq *proto.ConnectRequest) (uid int, err error) {
+	reply := &proto.ConnectReply{}
+	err = logicRpcClient.Call(context.Background(), "Connect", connReq, reply)
+	if err != nil {
+		logrus.Fatalf("failed to call: %v", err)
+	}
+	uid = reply.UserId
+	logrus.Infof("connect logic userId :%d", reply.UserId)
+	return
+}
+
+func (rpc *RpcConnect) DisConnect(disConnReq *proto.DisConnectRequest) (err error) {
+	reply := &proto.DisConnectReply{}
+	if err = logicRpcClient.Call(context.Background(), "DisConnect", disConnReq, reply); err != nil {
+		logrus.Fatalf("failed to call: %v", err)
+	}
+	return
+}
+
 func (c *Connect) InitConnectWebsocketRpcServer() (err error) {
 	var network, addr string
 	connectRpcAddress := strings.Split(config.Conf.Connect.ConnectRpcAddressWebSockts.Address, ",")
@@ -137,6 +115,7 @@ func (rpc *RpcConnectPush) PushSingleMsg(ctx context.Context, pushMsgReq *proto.
 	logrus.Infof("successReply:%v", successReply)
 	return
 }
+
 func (rpc *RpcConnectPush) PushRoomMsg(ctx context.Context, pushRoomMsgReq *proto.PushRoomMsgRequest, successReply *proto.SuccessReply) (err error) {
 	successReply.Code = config.SuccessReplyCode
 	successReply.Msg = config.SuccessReplyMsg
@@ -146,6 +125,7 @@ func (rpc *RpcConnectPush) PushRoomMsg(ctx context.Context, pushRoomMsgReq *prot
 	}
 	return
 }
+
 func (rpc *RpcConnectPush) PushRoomCount(ctx context.Context, pushRoomMsgReq *proto.PushRoomMsgRequest, successReply *proto.SuccessReply) (err error) {
 	successReply.Code = config.SuccessReplyCode
 	successReply.Msg = config.SuccessReplyMsg
@@ -155,6 +135,7 @@ func (rpc *RpcConnectPush) PushRoomCount(ctx context.Context, pushRoomMsgReq *pr
 	}
 	return
 }
+
 func (rpc *RpcConnectPush) PushRoomInfo(ctx context.Context, pushRoomMsgReq *proto.PushRoomMsgRequest, successReply *proto.SuccessReply) (err error) {
 	successReply.Code = config.SuccessReplyCode
 	successReply.Msg = config.SuccessReplyMsg
@@ -163,4 +144,31 @@ func (rpc *RpcConnectPush) PushRoomInfo(ctx context.Context, pushRoomMsgReq *pro
 		bucket.BroadcastRoom(pushRoomMsgReq)
 	}
 	return
+}
+
+func (c *Connect) createConnectWebsocktsRpcServer(network string, addr string) {
+	s := server.NewServer()
+	addRegistryPlugin(s, network, addr)
+	//config.Conf.Connect.ConnectTcp.ServerId
+	//s.RegisterName(config.Conf.Common.CommonEtcd.ServerPathConnect, new(RpcConnectPush), fmt.Sprintf("%s", config.Conf.Connect.ConnectWebsocket.ServerId))
+	s.RegisterName(config.Conf.Common.CommonEtcd.ServerPathConnect, new(RpcConnectPush), fmt.Sprintf("serverId=%s&serverType=ws", c.ServerId))
+	s.RegisterOnShutdown(func(s *server.Server) {
+		s.UnregisterAll()
+	})
+	s.Serve(network, addr)
+}
+
+func addRegistryPlugin(s *server.Server, network string, addr string) {
+	r := &serverplugin.EtcdV3RegisterPlugin{
+		ServiceAddress: network + "@" + addr,
+		EtcdServers:    []string{config.Conf.Common.CommonEtcd.Host},
+		BasePath:       config.Conf.Common.CommonEtcd.BasePath,
+		Metrics:        metrics.NewRegistry(),
+		UpdateInterval: time.Minute,
+	}
+	err := r.Start()
+	if err != nil {
+		logrus.Fatal(err)
+	}
+	s.Plugins.Add(r)
 }

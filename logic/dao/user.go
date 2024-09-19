@@ -2,6 +2,7 @@ package dao
 
 import (
 	"errors"
+	"github.com/sirupsen/logrus"
 	"gochat_my/db"
 	"time"
 )
@@ -21,6 +22,7 @@ func (*User) TableName() string {
 }
 func (u *User) Add() (userId int, err error) {
 	if u.UserName == "" || u.Password == "" {
+		logrus.Infof("name and pwd is %s,%s", u.UserName, u.Password)
 		return 0, errors.New("username or password empty !")
 	}
 	oUser := u.CheckHaveUserName(u.UserName)

@@ -1,3 +1,8 @@
+/**
+ * Created by lock
+ * Date: 2019-08-13
+ * Time: 10:13
+ */
 package task
 
 import (
@@ -16,6 +21,11 @@ import (
 	"time"
 )
 
+var RClient = &RpcConnectClient{
+	ServerInsMap: make(map[string][]Instance),
+	IndexMap:     make(map[string]int),
+}
+
 type Instance struct {
 	ServerType string
 	ServerId   string
@@ -24,21 +34,15 @@ type Instance struct {
 
 type RpcConnectClient struct {
 	lock         sync.Mutex
-	ServerInsMap map[string][]Instance // serverId -- []instance 每个服务有多个实例
-	IndexMap     map[string]int        // serverId -- index
+	ServerInsMap map[string][]Instance //serverId--[]ins
+	IndexMap     map[string]int        //serverId--index
 }
 
-var RClient = &RpcConnectClient{
-	ServerInsMap: make(map[string][]Instance),
-	IndexMap:     make(map[string]int),
-}
-
-func (rc *RpcConnectClient) GetClientByServerId(serverId string) (c client.XClient, err error) {
-	// 轮询[]Instance 实现负载均衡
+func (rc *RpcConnectClient) GetRpcClientByServerId(serverId string) (c client.XClient, err error) {
 	rc.lock.Lock()
 	defer rc.lock.Unlock()
 	if _, ok := rc.ServerInsMap[serverId]; !ok || len(rc.ServerInsMap[serverId]) <= 0 {
-		return nil, errors.New("no connect layer ip :" + serverId)
+		return nil, errors.New("no connect layer ip:" + serverId)
 	}
 	if _, ok := rc.IndexMap[serverId]; !ok {
 		rc.IndexMap = map[string]int{
@@ -47,15 +51,15 @@ func (rc *RpcConnectClient) GetClientByServerId(serverId string) (c client.XClie
 	}
 	idx := rc.IndexMap[serverId] % len(rc.ServerInsMap[serverId])
 	ins := rc.ServerInsMap[serverId][idx]
-	// 下次调用serverId的IndexMap时会自动到下一个实例，实现轮训服务的多个实例
 	rc.IndexMap[serverId] = (rc.IndexMap[serverId] + 1) % len(rc.ServerInsMap[serverId])
 	return ins.Client, nil
 }
+
 func (rc *RpcConnectClient) GetAllConnectTypeRpcClient() (rpcClientList []client.XClient) {
-	for serverId := range rc.ServerInsMap {
-		c, err := rc.GetClientByServerId(serverId)
+	for serverId, _ := range rc.ServerInsMap {
+		c, err := rc.GetRpcClientByServerId(serverId)
 		if err != nil {
-			logrus.Infof("GetAllConnectTypeRpcClient err :%s", err.Error())
+			logrus.Infof("GetAllConnectTypeRpcClient err:%s", err.Error())
 			continue
 		}
 		rpcClientList = append(rpcClientList, c)
@@ -63,8 +67,19 @@ func (rc *RpcConnectClient) GetAllConnectTypeRpcClient() (rpcClientList []client
 	return
 }
 
+func getParamByKey(s string, key string) string {
+	params := strings.Split(s, "&")
+	for _, p := range params {
+		kv := strings.Split(p, "=")
+		if len(kv) == 2 && kv[0] == key {
+			return kv[1]
+		}
+	}
+	return ""
+}
+
 func (task *Task) InitConnectRpcClient() (err error) {
-	etcdConfigOpt := &store.Config{
+	etcdConfigOption := &store.Config{
 		ClientTLS:         nil,
 		TLS:               nil,
 		ConnectionTimeout: time.Duration(config.Conf.Common.CommonEtcd.ConnectionTimeout) * time.Second,
@@ -73,33 +88,35 @@ func (task *Task) InitConnectRpcClient() (err error) {
 		Username:          config.Conf.Common.CommonEtcd.UserName,
 		Password:          config.Conf.Common.CommonEtcd.Password,
 	}
-	d, e := etcdV3.NewEtcdDiscovery(
-		config.Conf.Common.CommonEtcd.BasePath,
-		config.Conf.Common.CommonEtcd.ServerPathLogic,
-		[]string{config.Conf.Common.CommonEtcd.Host},
+	etcdConfig := config.Conf.Common.CommonEtcd
+	d, e := etcdV3.NewEtcdV3Discovery(
+		etcdConfig.BasePath,
+		etcdConfig.ServerPathConnect,
+		[]string{etcdConfig.Host},
 		true,
-		etcdConfigOpt)
+		etcdConfigOption,
+	)
 	if e != nil {
-		logrus.Fatalf("init task rpc etcd discovery client fail : %s", e.Error())
+		logrus.Fatalf("init task rpc etcd discovery client fail:%s", e.Error())
 	}
 	if len(d.GetServices()) <= 0 {
-		logrus.Panicf("no etcd server find !")
+		logrus.Panicf("no etcd server find!")
 	}
 	for _, connectConf := range d.GetServices() {
-		logrus.Infof("key is %s,value is %s", connectConf.Key, connectConf.Value)
-		// RpcConnectClients
+		logrus.Infof("key is:%s,value is:%s", connectConf.Key, connectConf.Value)
+		//RpcConnectClients
 		serverType := getParamByKey(connectConf.Value, "serverType")
 		serverId := getParamByKey(connectConf.Value, "serverId")
-		logrus.Infof("serverType is %s,serverId is %s", serverType, serverId)
+		logrus.Infof("serverType is:%s,serverId is:%s", serverType, serverId)
 		if serverType == "" || serverId == "" {
 			continue
 		}
 		d, e := client.NewPeer2PeerDiscovery(connectConf.Key, "")
 		if e != nil {
-			logrus.Fatalf("init task rpc client fail : %s", e.Error())
+			logrus.Errorf("init task client.NewPeer2PeerDiscovery client fail:%s", e.Error())
 			continue
 		}
-		c := client.NewXClient(config.Conf.Common.CommonEtcd.ServerPathConnect, client.Failtry, client.RandomSelect, d, client.DefaultOption)
+		c := client.NewXClient(etcdConfig.ServerPathConnect, client.Failtry, client.RandomSelect, d, client.DefaultOption)
 		ins := Instance{
 			ServerType: serverType,
 			ServerId:   serverId,
@@ -111,61 +128,53 @@ func (task *Task) InitConnectRpcClient() (err error) {
 			RClient.ServerInsMap[serverId] = append(RClient.ServerInsMap[serverId], ins)
 		}
 	}
+	// watch connect server change && update RpcConnectClientList
 	go task.watchServicesChange(d)
 	return
 }
-func (task *Task) watchServicesChange(d client.ServiceDiscovery) { // create a service index map
+
+func (task *Task) watchServicesChange(d client.ServiceDiscovery) {
+	etcdConfig := config.Conf.Common.CommonEtcd
 	for kvChan := range d.WatchService() {
 		if len(kvChan) <= 0 {
-			logrus.Errorf("connect services change ,connect alarm ,no abilable ip")
+			logrus.Errorf("connect services change, connect alarm, no abailable ip")
 		}
-		logrus.Infof("connect services change trigger ... ")
+		logrus.Infof("connect services change trigger...")
 		insMap := make(map[string][]Instance)
 		for _, kv := range kvChan {
-			logrus.Infof("connect services change ,key is %s ,value is %s ", kv.Key, kv.Value)
+			logrus.Infof("connect services change,key is:%s,value is:%s", kv.Key, kv.Value)
 			serverType := getParamByKey(kv.Value, "serverType")
 			serverId := getParamByKey(kv.Value, "serverId")
-			logrus.Infof("serverType is %s ,serverId is %s ", serverType, serverId)
+			logrus.Infof("serverType is:%s,serverId is:%s", serverType, serverId)
 			if serverType == "" || serverId == "" {
 				continue
 			}
 			d, e := client.NewPeer2PeerDiscovery(kv.Key, "")
 			if e != nil {
-				logrus.Errorf("init task client.NewPeer2PeerDiscovery watch client fail : %s", e.Error())
+				logrus.Errorf("init task client.NewPeer2PeerDiscovery watch client fail:%s", e.Error())
 				continue
 			}
-			c := client.NewXClient(config.Conf.Common.CommonEtcd.ServerPathConnect, client.Failtry, client.RandomSelect, d, client.DefaultOption)
+			c := client.NewXClient(etcdConfig.ServerPathConnect, client.Failtry, client.RandomSelect, d, client.DefaultOption)
 			ins := Instance{
 				ServerType: serverType,
 				ServerId:   serverId,
 				Client:     c,
 			}
-			if _, ok := RClient.ServerInsMap[serverId]; !ok {
+			if _, ok := insMap[serverId]; !ok {
 				insMap[serverId] = []Instance{ins}
 			} else {
 				insMap[serverId] = append(insMap[serverId], ins)
 			}
-			RClient.lock.Lock()
-			RClient.ServerInsMap = insMap
-			RClient.lock.Unlock()
 		}
+		RClient.lock.Lock()
+		RClient.ServerInsMap = insMap
+		RClient.lock.Unlock()
 
 	}
-}
-func getParamByKey(s, key string) string {
-	params := strings.Split(s, "&")
-	for _, p := range params {
-		kv := strings.Split(p, "=")
-		if len(kv) == 2 && kv[0] == key {
-			return kv[1]
-		}
-	}
-	logrus.Infof("getParamByKey Failed ,k-v pair not exist")
-	return ""
 }
 
 func (task *Task) pushSingleToConnect(serverId string, userId int, msg []byte) {
-	logrus.Infof("pushSingleToConnect Msg : %s", string(msg))
+	logrus.Infof("pushSingleToConnect Body %s", string(msg))
 	pushMsgReq := &proto.PushMsgRequest{
 		UserId: userId,
 		Msg: proto.Msg{
@@ -176,16 +185,17 @@ func (task *Task) pushSingleToConnect(serverId string, userId int, msg []byte) {
 		},
 	}
 	reply := &proto.SuccessReply{}
-	connectRpc, err := RClient.GetClientByServerId(serverId)
+	connectRpc, err := RClient.GetRpcClientByServerId(serverId)
 	if err != nil {
-		logrus.Infof("get rpc client err : %s", err.Error())
+		logrus.Infof("get rpc client err %v", err)
 	}
 	err = connectRpc.Call(context.Background(), "PushSingleMsg", pushMsgReq, reply)
 	if err != nil {
-		logrus.Infof("pushSingleToConnect call err : %v", err)
+		logrus.Infof("pushSingleToConnect Call err %v", err)
 	}
 	logrus.Infof("reply %s", reply.Msg)
 }
+
 func (task *Task) broadcastRoomToConnect(roomId int, msg []byte) {
 	pushRoomMsgReq := &proto.PushRoomMsgRequest{
 		RoomId: roomId,
@@ -199,24 +209,28 @@ func (task *Task) broadcastRoomToConnect(roomId int, msg []byte) {
 	reply := &proto.SuccessReply{}
 	rpcList := RClient.GetAllConnectTypeRpcClient()
 	for _, rpc := range rpcList {
-		logrus.Infof("broadcastRoomToConnect rpc %v", rpc)
-		_ = rpc.Call(context.Background(), "PushRoomMsg", pushRoomMsgReq, reply)
-		logrus.Infof("broadcastRoomToConnect reply %s", reply.Msg)
+		logrus.Infof("broadcastRoomToConnect rpc  %v", rpc)
+		rpc.Call(context.Background(), "PushRoomMsg", pushRoomMsgReq, reply)
+		logrus.Infof("reply %s", reply.Msg)
 	}
 }
+
 func (task *Task) broadcastRoomCountToConnect(roomId, count int) {
-	msg := &proto.RedisRoomCountMsg{Count: count, Op: config.OpRoomCountSend}
+	msg := &proto.RedisRoomCountMsg{
+		Count: count,
+		Op:    config.OpRoomCountSend,
+	}
 	var body []byte
 	var err error
 	if body, err = json.Marshal(msg); err != nil {
-		logrus.Warnf("broadcastRoomCountToConnect marshal err %v", err)
+		logrus.Warnf("broadcastRoomCountToConnect  json.Marshal err :%s", err.Error())
 		return
 	}
 	pushRoomMsgReq := &proto.PushRoomMsgRequest{
 		RoomId: roomId,
 		Msg: proto.Msg{
 			Ver:       config.MsgVersion,
-			Operation: config.OpRoomSend,
+			Operation: config.OpRoomCountSend,
 			SeqId:     tools.GetSnowflakeId(),
 			Body:      body,
 		},
@@ -224,11 +238,12 @@ func (task *Task) broadcastRoomCountToConnect(roomId, count int) {
 	reply := &proto.SuccessReply{}
 	rpcList := RClient.GetAllConnectTypeRpcClient()
 	for _, rpc := range rpcList {
-		logrus.Infof("broadcastRoomCountToConnect rpc %v", rpc)
-		_ = rpc.Call(context.Background(), "PushRoomCount", pushRoomMsgReq, reply)
-		logrus.Infof("broadcastRoomCountToConnect reply %s", reply.Msg)
+		logrus.Infof("broadcastRoomCountToConnect rpc  %v", rpc)
+		rpc.Call(context.Background(), "PushRoomCount", pushRoomMsgReq, reply)
+		logrus.Infof("reply %s", reply.Msg)
 	}
 }
+
 func (task *Task) broadcastRoomInfoToConnect(roomId int, roomUserInfo map[string]string) {
 	msg := &proto.RedisRoomInfo{
 		Count:        len(roomUserInfo),
@@ -239,14 +254,14 @@ func (task *Task) broadcastRoomInfoToConnect(roomId int, roomUserInfo map[string
 	var body []byte
 	var err error
 	if body, err = json.Marshal(msg); err != nil {
-		logrus.Warnf("broadcastRoomInfoToConnect marshal err %v", err)
+		logrus.Warnf("broadcastRoomInfoToConnect  json.Marshal err :%s", err.Error())
 		return
 	}
 	pushRoomMsgReq := &proto.PushRoomMsgRequest{
 		RoomId: roomId,
 		Msg: proto.Msg{
 			Ver:       config.MsgVersion,
-			Operation: config.OpRoomSend,
+			Operation: config.OpRoomInfoSend,
 			SeqId:     tools.GetSnowflakeId(),
 			Body:      body,
 		},
@@ -254,8 +269,8 @@ func (task *Task) broadcastRoomInfoToConnect(roomId int, roomUserInfo map[string
 	reply := &proto.SuccessReply{}
 	rpcList := RClient.GetAllConnectTypeRpcClient()
 	for _, rpc := range rpcList {
-		logrus.Infof("broadcastRoomInfoToConnect rpc %v", rpc)
-		_ = rpc.Call(context.Background(), "PushRoomInfo", pushRoomMsgReq, reply)
-		logrus.Infof("broadcastRoomInfoToConnect rpc reply %s", reply.Msg)
+		logrus.Infof("broadcastRoomInfoToConnect rpc  %v", rpc)
+		rpc.Call(context.Background(), "PushRoomInfo", pushRoomMsgReq, reply)
+		logrus.Infof("broadcastRoomInfoToConnect rpc  reply %v", reply)
 	}
 }

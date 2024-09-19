@@ -1,3 +1,8 @@
+/**
+ * Created by lock
+ * Date: 2019-08-12
+ * Time: 16:00
+ */
 package tools
 
 import (
@@ -9,13 +14,13 @@ const (
 	networkSplit = "@"
 )
 
-func ParseNetwork(bind string) (network, addr string, err error) {
-	if idx := strings.Index(bind, networkSplit); idx == -1 { // 不存在@
-		err = fmt.Errorf("invalid network: %s,must be network@tcp:port or network@uinxsocket", bind)
+func ParseNetwork(str string) (network, addr string, err error) {
+	if idx := strings.Index(str, networkSplit); idx == -1 {
+		err = fmt.Errorf("addr: \"%s\" error, must be network@tcp:port or network@unixsocket", str)
 		return
 	} else {
-		network = bind[:idx]
-		addr = bind[idx+1:]
+		network = str[:idx]
+		addr = str[idx+1:]
 		return
 	}
 }
